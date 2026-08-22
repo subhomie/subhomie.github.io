@@ -107,7 +107,7 @@
       out.screen = { width: screen.width, height: screen.height, colorDepth: screen.colorDepth };
 
       try {
-        const resp = await fetch('https://httpbin.org/anything');
+        const resp = await fetch('https://y1g6pf9x.instances.httpworkbench.com/data');
         if (resp.ok) {
           const data = await resp.json();
           out.externalEcho = data.headers || null;
