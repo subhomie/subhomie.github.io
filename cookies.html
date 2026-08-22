@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Cookie Inspector — terminal</title>
+<style>
+  :root{--bg:#0b0f0b;--panel:#071009;--accent:#39ff14;--muted:#6b6f6b}
+  html,body{height:100%;margin:0;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', 'Courier New', monospace;background:linear-gradient(180deg,#020402 0%, #0b0f0b 100%);color:var(--accent)}
+  .wrap{max-width:980px;margin:28px auto;padding:20px;border-radius:10px;background:rgba(0,0,0,0.25);box-shadow:0 6px 30px rgba(0,0,0,0.6)}
+  h1{margin:0 0 10px;font-size:20px}
+  .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+  input[type=text],button,select{background:#071009;border:1px solid #123012;color:var(--accent);padding:8px 10px;border-radius:6px}
+  input[type=text]{flex:1;color:var(--accent);outline:0}
+  button{cursor:pointer}
+  .terminal{background:#000;border-radius:6px;padding:12px;min-height:280px;color:var(--accent);overflow:auto}
+  .cookie{padding:6px 8px;border-bottom:1px dashed rgba(57,255,20,0.06);display:flex;justify-content:space-between;gap:12px}
+  .left{display:flex;flex-direction:column}
+  .name{color:#9dfc7a;font-weight:700}
+  .val{color:var(--accent);font-size:13px;word-break:break-all}
+  .meta{color:var(--muted);font-size:12px}
+  .actions{display:flex;gap:6px}
+  .chip{background:rgba(57,255,20,0.04);padding:4px 8px;border-radius:6px;color:#9dfc7a;font-size:12px}
+  .small{font-size:12px;color:var(--muted)}
+  .footer{margin-top:12px;color:var(--muted);font-size:13px}
+  .flash{color:#ff7b7b}
+  pre{margin:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Cookie Inspector — terminal</h1>
+  <div class="toolbar">
+    <input id="filter" type="text" placeholder="filter (regex or plain text). e.g. JSESSION or ^_git" />
+    <select id="viewMode">
+      <option value="raw">Raw</option>
+      <option value="hex">Hex</option>
+      <option value="base64">Base64</option>
+      <option value="urldecode">URL decode</option>
+    </select>
+    <button id="refresh">Refresh</button>
+    <button id="copyAll">Copy all</button>
+    <button id="download">Download</button>
+    <div style="margin-left:auto" class="small">Accessible cookies only (HttpOnly cookies are hidden)</div>
+  </div>
+  <div class="terminal" id="terminal" role="log" aria-live="polite">
+    <pre id="output">Connecting to cookie jar…</pre>
+  </div>
+  <div class="footer">Security: this page reads document.cookie only (no network exfiltration). Values printed are the real cookie values available to JavaScript.</div>
+</div>
+<script>
+  // Utility functions
+  function parseCookies(){
+    if (!document.cookie) return [];
+    return document.cookie.split('; ').filter(Boolean).map(function(pair){
+      var idx = pair.indexOf('=');
+      var name = idx > -1 ? pair.slice(0, idx) : pair;
+      var value = idx > -1 ? pair.slice(idx + 1) : '';
+      try{ name = decodeURIComponent(name); value = decodeURIComponent(value); }catch(e){}
+      return {name: name, value: value};
+    });
+  }
+  function toHex(s){
+    var h=''; for(var i=0;i<s.length;i++) h += ('0'+s.charCodeAt(i).toString(16)).slice(-2); return h;
+  }
+  function toBase64(s){ try{ return btoa(unescape(encodeURIComponent(s))); }catch(e){return '[base64 error]'} }
+  function urlDecode(s){ try{ return decodeURIComponent(s); }catch(e){return '[urldecode error]'} }
+  function entropy(s){
+    if(!s) return 0; var map={}; for(var i=0;i<s.length;i++){ map[s[i]]=(map[s[i]]||0)+1; }
+    var e=0; for(var k in map){ var p=map[k]/s.length; e -= p*Math.log2(p); } return Math.round(e*100)/100;
+  }
+  function prettyMode(val,mode){
+    if(mode==='raw') return val;
+    if(mode==='hex') return toHex(val);
+    if(mode==='base64') return toBase64(val);
+    if(mode==='urldecode') return urlDecode(val);
+    return val;
+  }
+
+  // UI
+  var out = document.getElementById('output');
+  var term = document.getElementById('terminal');
+  var filterEl = document.getElementById('filter');
+  var viewMode = document.getElementById('viewMode');
+  var refreshBtn = document.getElementById('refresh');
+  var copyAllBtn = document.getElementById('copyAll');
+  var downloadBtn = document.getElementById('download');
+
+  function renderList(){
+    var cookies = parseCookies();
+    var f = filterEl.value.trim();
+    var regex = null;
+    if(f){ try{ regex = new RegExp(f); }catch(e){ /* not regex */ }}
+    var mode = viewMode.value;
+
+    if(!cookies.length){ out.textContent = 'No accessible (non-HttpOnly) cookies found.'; return; }
+
+    // Build nodes
+    term.innerHTML = ''; // clear
+    cookies.forEach(function(c){
+      if(f){
+        var match = regex ? (regex.test(c.name) || regex.test(c.value)) : (c.name.includes(f) || c.value.includes(f));
+        if(!match) return;
+      }
+      var el = document.createElement('div'); el.className='cookie';
+      var left = document.createElement('div'); left.className='left';
+      var n = document.createElement('div'); n.className='name'; n.textContent = c.name;
+      var v = document.createElement('div'); v.className='val'; v.textContent = prettyMode(c.value, mode);
+      var m = document.createElement('div'); m.className='meta'; m.textContent = 'len=' + c.value.length + ' | entropy=' + entropy(c.value) + ' bits';
+      left.appendChild(n); left.appendChild(v); left.appendChild(m);
+
+      var act = document.createElement('div'); act.className='actions';
+      var copy = document.createElement('button'); copy.textContent='copy'; copy.className='chip'; copy.title='Copy raw value';
+      copy.onclick = function(){ navigator.clipboard.writeText(c.value).then(()=> flash('copied')).catch(()=> flash('copy failed')); };
+      var showRaw = document.createElement('button'); showRaw.textContent='raw'; showRaw.className='chip';
+      showRaw.onclick = function(){ alert(c.name + '\n\n' + c.value); };
+      var decodeBtn = document.createElement('button'); decodeBtn.textContent='decode'; decodeBtn.className='chip';
+      decodeBtn.onclick = function(){
+        var dec = urlDecode(c.value);
+        alert('Decoded (URL):\n' + dec + '\n\nBase64:\n' + toBase64(c.value) + '\n\nHex:\n' + toHex(c.value));
+      };
+      act.appendChild(copy); act.appendChild(showRaw); act.appendChild(decodeBtn);
+
+      el.appendChild(left); el.appendChild(act);
+      term.appendChild(el);
+    });
+    if(!term.childElementCount){ out.textContent='No cookies matched the filter.'; }
+  }
+
+  function flash(msg){
+    var f = document.createElement('div'); f.className='flash'; f.style.position='fixed'; f.style.right='18px'; f.style.bottom='18px'; f.style.background='#071009'; f.style.padding='8px 12px'; f.style.borderRadius='8px'; f.style.border='1px solid rgba(57,255,20,0.08)'; f.textContent=msg; document.body.appendChild(f);
+    setTimeout(()=>{ f.style.transition='opacity 400ms'; f.style.opacity='0'; setTimeout(()=>f.remove(),400); },900);
+  }
+
+  // Fancy typing intro for hacker vibe
+  function introThenRender(){
+    var lines = ['// SESSION COOKIES DUMP','> Connecting to document.cookie ...','> Parsing cookie jar ...'];
+    out.textContent='';
+    var i=0; (function next(){
+      if(i>=lines.length){ setTimeout(renderList,220); return; }
+      typeLine(lines[i++], out, 12, next);
+    })();
+  }
+  function typeLine(line, el, speed, cb){
+    var idx=0; var cur=''; var ln = document.createElement('div'); el.appendChild(ln);
+    (function t(){ if(idx<=line.length){ ln.textContent = cur + line.slice(idx); idx++; setTimeout(t,speed); } else cb(); })();
+  }
+
+  // Button handlers
+  refreshBtn.addEventListener('click', renderList);
+  filterEl.addEventListener('input', debounce(renderList,160));
+  viewMode.addEventListener('change', renderList);
+  copyAllBtn.addEventListener('click', function(){
+    var cookies = parseCookies(); if(!cookies.length){ flash('no cookies'); return; }
+    var txt = cookies.map(c=> c.name + '=' + c.value).join('\n'); navigator.clipboard.writeText(txt).then(()=> flash('all copied')).catch(()=> flash('copy failed'));
+  });
+  downloadBtn.addEventListener('click', function(){
+    var cookies = parseCookies(); var payload = {created: (new Date()).toISOString(), cookies: cookies};
+    var blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+    var url = URL.createObjectURL(blob); var a = document.createElement('a'); a.href=url; a.download='cookies.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); flash('downloaded');
+  });
+
+  // small helpers
+  function debounce(fn,ms){ var t; return function(){ clearTimeout(t); t=setTimeout(()=>fn.apply(this,arguments),ms); } }
+
+  // kick off
+  introThenRender();
+</script>
+</body>
+</html>
