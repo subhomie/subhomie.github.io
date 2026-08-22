@@ -10,38 +10,89 @@
       padding: 2rem;
       line-height: 1.5;
       margin: 0;
-      overflow-x: hidden;          /* no horizontal page scroll */
+      overflow-x: hidden;
+      background: #f8f9fa;
+      color: #222;
+    }
+    h1 {
+      margin-top: 0;
+    }
+    .section {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .section h2 {
+      margin: 0 0 0.75rem 0;
+      font-size: 1.4rem;
+      color: #111;
+      border-bottom: 2px solid #e9ecef;
+      padding-bottom: 0.4rem;
+    }
+    .cookie-list, .info-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .cookie-list li, .info-list li {
+      padding: 0.35rem 0;
+      border-bottom: 1px solid #f1f3f5;
+      word-break: break-all;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.95rem;
+    }
+    .cookie-list li:last-child, .info-list li:last-child {
+      border-bottom: none;
+    }
+    .cookie-name {
+      color: #0d6efd;
+      font-weight: 600;
+    }
+    .cookie-value {
+      color: #212529;
+    }
+    .empty {
+      color: #6c757d;
+      font-style: italic;
+    }
+    .ato {
+      color: #fff;
+      background: #d9534f;
+      padding: 0.35rem 0.75rem;
+      display: inline-block;
+      margin-top: 0.5rem;
+      border-radius: 4px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
     }
     pre {
       background: #111;
       color: #dcdcdc;
       padding: 1rem;
       margin: 0;
-      white-space: pre-wrap;       /* wrap long lines */
-      word-wrap: break-word;       /* break very long words/URLs */
-      overflow-wrap: anywhere;     /* extra safety for long tokens */
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      overflow-wrap: anywhere;
       max-width: 100%;
       box-sizing: border-box;
-    }
-    .ato {
-      color: #fff;
-      background: #d9534f;
-      padding: 0.25rem 0.5rem;
-      display: inline-block;
-      margin-top: 1rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
     }
   </style>
 </head>
 <body>
   <h1>Visitor Headers & Info</h1>
   <p>This page attempts to show the visitor's cookies and other client-side request info. Note: GitHub Pages is static, so server-side request headers are not available here — we show what the browser exposes.</p>
+  
   <div id="output"></div>
+
   <script>
     async function gather() {
       const out = {};
-      // Cookies (from document.cookie)
       out.cookie = document.cookie || null;
-      // Common client-side values that resemble request headers
       out.userAgent = navigator.userAgent || null;
       out.language = navigator.language || (navigator.languages && navigator.languages.join(',')) || null;
       out.platform = navigator.platform || null;
@@ -51,7 +102,7 @@
       out.locationHref = window.location.href;
       out.timezone = (Intl && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : null;
       out.screen = { width: screen.width, height: screen.height, colorDepth: screen.colorDepth };
-      // Try to fetch echoed headers from an external service (best-effort).
+
       try {
         const resp = await fetch('https://httpbin.org/anything');
         if (resp.ok) {
@@ -65,13 +116,113 @@
       }
       return out;
     }
+
+    function parseCookies(cookieStr) {
+      if (!cookieStr || !cookieStr.trim()) return [];
+      return cookieStr.split(';').map(c => c.trim()).filter(Boolean).map(pair => {
+        const eq = pair.indexOf('=');
+        if (eq === -1) return { name: pair, value: '' };
+        return {
+          name: pair.slice(0, eq).trim(),
+          value: pair.slice(eq + 1).trim()
+        };
+      });
+    }
+
     function render(info) {
       const root = document.getElementById('output');
-      const pre = document.createElement('pre');
-      pre.textContent = JSON.stringify(info, null, 2);
-      root.appendChild(pre);
-      // If there's a cookie present in document.cookie or echoed headers include Cookie, show ATO
-      const hasCookie = (info.cookie && info.cookie.length > 0) || (info.externalEcho && Object.keys(info.externalEcho).some(k => k.toLowerCase() === 'cookie' && info.externalEcho[k]));
+      root.innerHTML = '';
+
+      // ===== COOKIES SECTION =====
+      const cookieSection = document.createElement('div');
+      cookieSection.className = 'section';
+
+      const cookieTitle = document.createElement('h2');
+      cookieTitle.textContent = 'Cookies';
+      cookieSection.appendChild(cookieTitle);
+
+      const cookies = parseCookies(info.cookie);
+      if (cookies.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'empty';
+        empty.textContent = 'No cookies found';
+        cookieSection.appendChild(empty);
+      } else {
+        const ul = document.createElement('ul');
+        ul.className = 'cookie-list';
+        cookies.forEach(c => {
+          const li = document.createElement('li');
+          li.innerHTML = `<span class="cookie-name">${escapeHtml(c.name)}</span>=<span class="cookie-value">${escapeHtml(c.value)}</span>`;
+          ul.appendChild(li);
+        });
+        cookieSection.appendChild(ul);
+      }
+      root.appendChild(cookieSection);
+
+      // ===== USER AGENT SECTION =====
+      const uaSection = document.createElement('div');
+      uaSection.className = 'section';
+
+      const uaTitle = document.createElement('h2');
+      uaTitle.textContent = 'User-Agent';
+      uaSection.appendChild(uaTitle);
+
+      const uaValue = document.createElement('p');
+      uaValue.style.margin = '0';
+      uaValue.style.wordBreak = 'break-all';
+      uaValue.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+      uaValue.textContent = info.userAgent || 'Not available';
+      uaSection.appendChild(uaValue);
+      root.appendChild(uaSection);
+
+      // ===== OTHER INFO =====
+      const otherSection = document.createElement('div');
+      otherSection.className = 'section';
+
+      const otherTitle = document.createElement('h2');
+      otherTitle.textContent = 'Other Client Info';
+      otherSection.appendChild(otherTitle);
+
+      const otherList = document.createElement('ul');
+      otherList.className = 'info-list';
+
+      const otherItems = [
+        ['Language', info.language],
+        ['Platform', info.platform],
+        ['Referrer', info.referrer || '(none)'],
+        ['Origin', info.origin],
+        ['Host', info.host],
+        ['Location', info.locationHref],
+        ['Timezone', info.timezone],
+        ['Screen', `${info.screen.width} × ${info.screen.height} (${info.screen.colorDepth}-bit)`]
+      ];
+
+      otherItems.forEach(([label, value]) => {
+        const li = document.createElement('li');
+        li.innerHTML = `<strong>${escapeHtml(label)}:</strong> ${escapeHtml(String(value || '—'))}`;
+        otherList.appendChild(li);
+      });
+      otherSection.appendChild(otherList);
+      root.appendChild(otherSection);
+
+      // ===== EXTERNAL ECHO (if any) =====
+      if (info.externalEcho) {
+        const echoSection = document.createElement('div');
+        echoSection.className = 'section';
+
+        const echoTitle = document.createElement('h2');
+        echoTitle.textContent = 'External Echoed Headers (httpbin)';
+        echoSection.appendChild(echoTitle);
+
+        const pre = document.createElement('pre');
+        pre.textContent = JSON.stringify(info.externalEcho, null, 2);
+        echoSection.appendChild(pre);
+        root.appendChild(echoSection);
+      }
+
+      // ATO badge
+      const hasCookie = (info.cookie && info.cookie.length > 0) ||
+        (info.externalEcho && Object.keys(info.externalEcho).some(k => k.toLowerCase() === 'cookie' && info.externalEcho[k]));
       if (hasCookie) {
         const badge = document.createElement('div');
         badge.className = 'ato';
@@ -79,6 +230,15 @@
         root.appendChild(badge);
       }
     }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
     gather().then(render).catch(e => {
       document.getElementById('output').textContent = 'Error: ' + (e && e.message);
     });
