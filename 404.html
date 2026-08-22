@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Redirecting…</title>
+  <script>
+    // preserve the path in the hash so the SPA can route correctly
+    var path = location.pathname + location.search + location.hash;
+    location.replace('/#' + path);
+  </script>
+</head>
+<body></body>
+</html>
