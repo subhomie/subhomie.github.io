@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Visitor Headers</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 2rem; line-height:1.5 }
+    pre { background:#111; color:#dcdcdc; padding:1rem; overflow:auto }
+    .ato { color: #fff; background: #d9534f; padding:0.25rem 0.5rem; display:inline-block; margin-top:1rem }
+  </style>
+</head>
+<body>
+  <h1>Visitor Headers & Info</h1>
+  <p>This page attempts to show the visitor's cookies and other client-side request info. Note: GitHub Pages is static, so server-side request headers are not available here — we show what the browser exposes.</p>
+
+  <div id="output"></div>
+
+  <script>
+    async function gather() {
+      const out = {};
+
+      // Cookies (from document.cookie)
+      out.cookie = document.cookie || null;
+
+      // Common client-side values that resemble request headers
+      out.userAgent = navigator.userAgent || null;
+      out.language = navigator.language || (navigator.languages && navigator.languages.join(',')) || null;
+      out.platform = navigator.platform || null;
+      out.referrer = document.referrer || null;
+      out.origin = window.location.origin;
+      out.host = window.location.host;
+      out.locationHref = window.location.href;
+      out.timezone = (Intl && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : null;
+      out.screen = { width: screen.width, height: screen.height, colorDepth: screen.colorDepth };
+
+      // Try to fetch echoed headers from an external service (best-effort).
+      try {
+        const resp = await fetch('https://httpbin.org/anything');
+        if (resp.ok) {
+          const data = await resp.json();
+          out.externalEcho = data.headers || null;
+        } else {
+          out.externalEcho = { error: 'httpbin returned ' + resp.status };
+        }
+      } catch (e) {
+        out.externalEcho = { error: 'fetch failed', message: e && e.message };
+      }
+
+      return out;
+    }
+
+    function render(info) {
+      const root = document.getElementById('output');
+
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(info, null, 2);
+      root.appendChild(pre);
+
+      // If there's a cookie present in document.cookie or echoed headers include Cookie, show ATO
+      const hasCookie = (info.cookie && info.cookie.length > 0) || (info.externalEcho && Object.keys(info.externalEcho).some(k => k.toLowerCase() === 'cookie' && info.externalEcho[k]));
+
+      if (hasCookie) {
+        const badge = document.createElement('div');
+        badge.className = 'ato';
+        badge.textContent = 'ATO';
+        root.appendChild(badge);
+      }
+    }
+
+    gather().then(render).catch(e => {
+      document.getElementById('output').textContent = 'Error: ' + (e && e.message);
+    });
+  </script>
+</body>
+</html>
