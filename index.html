@@ -14,9 +14,7 @@
       background: #f8f9fa;
       color: #222;
     }
-    h1 {
-      margin-top: 0;
-    }
+    h1 { margin-top: 0; }
     .section {
       background: #fff;
       border: 1px solid #ddd;
@@ -27,7 +25,7 @@
     }
     .section h2 {
       margin: 0 0 0.75rem 0;
-      font-size: 1.4rem;
+      font-size: 1.45rem;
       color: #111;
       border-bottom: 2px solid #e9ecef;
       padding-bottom: 0.4rem;
@@ -38,7 +36,7 @@
       list-style: none;
     }
     .cookie-list li, .info-list li {
-      padding: 0.35rem 0;
+      padding: 0.4rem 0;
       border-bottom: 1px solid #f1f3f5;
       word-break: break-all;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -57,6 +55,7 @@
     .empty {
       color: #6c757d;
       font-style: italic;
+      margin: 0;
     }
     .ato {
       color: #fff;
@@ -85,12 +84,15 @@
 </head>
 <body>
   <h1>Visitor Headers & Info</h1>
-  <p>This page attempts to show the visitor's cookies and other client-side request info. Note: GitHub Pages is static, so server-side request headers are not available here — we show what the browser exposes.</p>
-  
+  <p>
+    This page shows the cookies and client-side info available on <strong>the current site</strong>
+    (the domain where this page is hosted).  
+    Note: JavaScript can only read non-HttpOnly cookies of the current domain.
+  </p>
+
   <div id="output"></div>
 
   <script>
-    alert ('XSS alse here, btw') 
     async function gather() {
       const out = {};
       out.cookie = document.cookie || null;
@@ -120,33 +122,44 @@
 
     function parseCookies(cookieStr) {
       if (!cookieStr || !cookieStr.trim()) return [];
-      return cookieStr.split(';').map(c => c.trim()).filter(Boolean).map(pair => {
-        const eq = pair.indexOf('=');
-        if (eq === -1) return { name: pair, value: '' };
-        return {
-          name: pair.slice(0, eq).trim(),
-          value: pair.slice(eq + 1).trim()
-        };
-      });
+      return cookieStr.split(';')
+        .map(c => c.trim())
+        .filter(Boolean)
+        .map(pair => {
+          const eq = pair.indexOf('=');
+          if (eq === -1) return { name: pair, value: '' };
+          return {
+            name: pair.slice(0, eq).trim(),
+            value: pair.slice(eq + 1).trim()
+          };
+        });
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
     }
 
     function render(info) {
       const root = document.getElementById('output');
       root.innerHTML = '';
 
-      // ===== COOKIES SECTION =====
+      // ===== COOKIES (current site) =====
       const cookieSection = document.createElement('div');
       cookieSection.className = 'section';
 
       const cookieTitle = document.createElement('h2');
-      cookieTitle.textContent = 'Cookies';
+      cookieTitle.textContent = 'Cookies (current site)';
       cookieSection.appendChild(cookieTitle);
 
       const cookies = parseCookies(info.cookie);
       if (cookies.length === 0) {
         const empty = document.createElement('p');
         empty.className = 'empty';
-        empty.textContent = 'No cookies found';
+        empty.textContent = 'No cookies found on this domain';
         cookieSection.appendChild(empty);
       } else {
         const ul = document.createElement('ul');
@@ -160,7 +173,7 @@
       }
       root.appendChild(cookieSection);
 
-      // ===== USER AGENT SECTION =====
+      // ===== USER-AGENT =====
       const uaSection = document.createElement('div');
       uaSection.className = 'section';
 
@@ -206,7 +219,7 @@
       otherSection.appendChild(otherList);
       root.appendChild(otherSection);
 
-      // ===== EXTERNAL ECHO (if any) =====
+      // ===== EXTERNAL ECHO =====
       if (info.externalEcho) {
         const echoSection = document.createElement('div');
         echoSection.className = 'section';
@@ -223,21 +236,15 @@
 
       // ATO badge
       const hasCookie = (info.cookie && info.cookie.length > 0) ||
-        (info.externalEcho && Object.keys(info.externalEcho).some(k => k.toLowerCase() === 'cookie' && info.externalEcho[k]));
+        (info.externalEcho && Object.keys(info.externalEcho).some(k =>
+          k.toLowerCase() === 'cookie' && info.externalEcho[k]
+        ));
       if (hasCookie) {
         const badge = document.createElement('div');
         badge.className = 'ato';
         badge.textContent = 'ATO';
         root.appendChild(badge);
       }
-    }
-
-    function escapeHtml(str) {
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
     }
 
     gather().then(render).catch(e => {
